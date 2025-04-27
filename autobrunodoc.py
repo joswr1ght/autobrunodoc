@@ -2,11 +2,23 @@
 """
 OpenAPI to Bruno Documentation Converter
 
+Joshua Wright | jwright@hasborg.com | Written with Copilot and Claude 3.7 Sonnet
+
 This script extracts documentation from an OpenAPI v3.0.0 specification file
 and populates Bruno .bru files with the extracted documentation.
 
 Usage:
-    python3 autobrunodoc.py <openapi_file> <bruno_collection_dir>
+    python3 autobrunodoc.py doc --openapi <filename> --workspace <bruno folder>
+    python3 autobrunodoc.py revert --workspace <bruno folder>
+
+Commands:
+    doc     Extract documentation from OpenAPI file and update Bruno files
+    revert  Restore .bru files from .bak backups created during documentation extraction
+    
+Options:
+    --openapi, -o    Path to the OpenAPI specification file (required for 'doc' command)
+    --workspace, -w  Path to the Bruno collection directory (required for all commands)
+    --help, -h       Show this help message
 """
 
 import sys
@@ -14,6 +26,7 @@ import os
 import yaml
 import re
 import shutil
+import getopt
 from pathlib import Path
 
 
@@ -224,38 +237,154 @@ def update_bruno_files(path_docs, bruno_dir):
         print(f"Updated {bru_file_path}")
 
 
-def main():
-    if len(sys.argv) != 3:
-        print("Usage: python3 autobrunodoc.py <openapi_file> <bruno_collection_dir>")
-        sys.exit(1)
-
-    openapi_file = sys.argv[1]
-    bruno_dir = sys.argv[2]
-
-    # Validate inputs
-    if not os.path.isfile(openapi_file):
-        print(f"Error: {openapi_file} is not a file.")
-        sys.exit(1)
-
+def revert_bruno_files(bruno_dir):
+    """Revert Bruno .bru files to their backup versions (.bak).
+    
+    Args:
+        bruno_dir (str): Path to the Bruno collection directory
+    
+    Returns:
+        int: Number of files reverted
+    """
+    # Ensure bruno_dir exists
     if not os.path.isdir(bruno_dir):
-        print(f"Error: {bruno_dir} is not a directory.")
+        print(f"Error: Bruno collection directory {bruno_dir} does not exist.")
+        return 0
+    
+    reverted_count = 0
+    
+    # Walk through all directories in the Bruno collection
+    for root, dirs, files in os.walk(bruno_dir):
+        # Find all .bak files
+        bak_files = [f for f in files if f.endswith('.bak')]
+        
+        for bak_file in bak_files:
+            bak_path = os.path.join(root, bak_file)
+            # Derive the original .bru file path
+            bru_file = bak_file.replace('.bak', '.bru')
+            bru_path = os.path.join(root, bru_file)
+            
+            # Check if both files exist
+            if os.path.exists(bru_path):
+                try:
+                    # Copy backup over the .bru file
+                    shutil.copy2(bak_path, bru_path)
+                    print(f"Reverted {bru_path} from backup")
+                    reverted_count += 1
+                except Exception as e:
+                    print(f"Error reverting {bru_path}: {e}")
+            else:
+                print(f"Warning: Original file {bru_path} not found for backup {bak_path}")
+    
+    return reverted_count
+
+
+def main():
+    """Main function to parse arguments and execute commands."""
+    # Command verbs
+    COMMANDS = {
+        'doc': 'Extract documentation from OpenAPI file and update Bruno files',
+        'revert': 'Restore .bru files from .bak backups created during documentation extraction'
+    }
+    
+    # Print usage information
+    def usage():
+        print(__doc__)
         sys.exit(1)
-
-    # Validate and load OpenAPI file
-    openapi_data = validate_openapi_file(openapi_file)
-    if not openapi_data:
-        sys.exit(1)
-
-    # Extract documentation
-    path_docs = extract_docs_from_openapi(openapi_data)
-    if not path_docs:
-        print("No documentation found in OpenAPI file.")
-        sys.exit(1)
-
-    # Update Bruno files
-    update_bruno_files(path_docs, bruno_dir)
-
-    print("Documentation extraction and Bruno file update completed.")
+    
+    # Check if any arguments were provided
+    if len(sys.argv) < 2:
+        usage()
+    
+    # Get the command verb
+    command = sys.argv[1]
+    
+    # Remove the command from argv for getopt
+    sys.argv.pop(1)
+    
+    if command not in COMMANDS:
+        print(f"Error: Unknown command '{command}'")
+        usage()
+    
+    # Handle each command
+    if command == 'doc':
+        try:
+            opts, args = getopt.getopt(sys.argv[1:], "ho:w:", ["help", "openapi=", "workspace="])
+        except getopt.GetoptError as err:
+            print(str(err))
+            usage()
+        
+        openapi_file = None
+        bruno_dir = None
+        
+        for opt, arg in opts:
+            if opt in ("-h", "--help"):
+                usage()
+            elif opt in ("-o", "--openapi"):
+                openapi_file = arg
+            elif opt in ("-w", "--workspace"):
+                bruno_dir = arg
+        
+        if not openapi_file or not bruno_dir:
+            print("Error: Both --openapi and --workspace options are required for the 'doc' command.")
+            usage()
+        
+        # Validate inputs
+        if not os.path.isfile(openapi_file):
+            print(f"Error: {openapi_file} is not a file.")
+            sys.exit(1)
+        
+        if not os.path.isdir(bruno_dir):
+            print(f"Error: {bruno_dir} is not a directory.")
+            sys.exit(1)
+        
+        # Validate and load OpenAPI file
+        openapi_data = validate_openapi_file(openapi_file)
+        if not openapi_data:
+            sys.exit(1)
+        
+        # Extract documentation
+        path_docs = extract_docs_from_openapi(openapi_data)
+        if not path_docs:
+            print("No documentation found in OpenAPI file.")
+            sys.exit(1)
+        
+        # Update Bruno files
+        update_bruno_files(path_docs, bruno_dir)
+        
+        print("Documentation extraction and Bruno file update completed.")
+    
+    elif command == 'revert':
+        try:
+            opts, args = getopt.getopt(sys.argv[1:], "hw:", ["help", "workspace="])
+        except getopt.GetoptError as err:
+            print(str(err))
+            usage()
+        
+        bruno_dir = None
+        
+        for opt, arg in opts:
+            if opt in ("-h", "--help"):
+                usage()
+            elif opt in ("-w", "--workspace"):
+                bruno_dir = arg
+        
+        if not bruno_dir:
+            print("Error: The --workspace option is required for the 'revert' command.")
+            usage()
+        
+        # Validate input
+        if not os.path.isdir(bruno_dir):
+            print(f"Error: {bruno_dir} is not a directory.")
+            sys.exit(1)
+        
+        # Revert Bruno files
+        reverted_count = revert_bruno_files(bruno_dir)
+        
+        if reverted_count > 0:
+            print(f"Successfully reverted {reverted_count} Bruno files from backups.")
+        else:
+            print("No Bruno files were reverted. No backups found or all restores failed.")
 
 
 if __name__ == "__main__":
