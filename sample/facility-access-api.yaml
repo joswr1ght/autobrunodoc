@@ -1,0 +1,3290 @@
+openapi: 3.0.0
+info:
+  title: Facilities Access API
+  version: 1.3.0
+  description: An internal API to manage physical access control, badges, logs, policies,
+    and emergency protocols.
+
+servers:
+  - url: http://localhost
+    description: Development server
+  - url: http://api.access.falsimentis.com
+    description: Production server
+
+# Security scheme definitions
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: UUID4 token obtained from the authentication endpoint
+
+paths:
+  /v1/me:
+    get:
+      summary: Get user profile
+      description: Retrieves the profile information of the currently authenticated user.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                    description: Unique identifier for the user
+                  username:
+                    type: string
+                    description: User's login name
+                  email:
+                    type: string
+                    format: email
+                    description: User's email address
+                  full_name:
+                    type: string
+                    description: User's full name
+                  roles:
+                    type: array
+                    description: List of user roles
+                    items:
+                      type: string
+                  department:
+                    type: string
+                    description: User's department
+                  last_login:
+                    type: string
+                    format: date-time
+                    description: Timestamp of last successful login
+              example:
+                user_id: "12345"
+                username: "john.doe"
+                email: "john.doe@example.com"
+                full_name: "John Doe"
+                roles: ["employee", "access_admin"]
+                department: "Engineering"
+                last_login: "2025-04-25T08:30:45Z"
+        '401':
+          description: Unauthorized, invalid or expired token
+      tags:
+      - Authentication & Session Management
+  /v1/users/{user_id}/badges:
+    get:
+      summary: List user badges
+      description: Retrieves all badges assigned to a specific user identified by their unique ID.
+      tags:
+      - Identity & Badge Management
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        description: Unique identifier of the user
+        schema:
+          type: string
+        example: "12345"
+      - name: status
+        in: query
+        required: false
+        description: Filter badges by status
+        schema:
+          type: string
+          enum: ["active", "revoked", "expired", "all"]
+        example: "active"
+      responses:
+        '200':
+          description: List of badges
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  badges:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        badge_id:
+                          type: string
+                          description: Unique identifier for the badge
+                        type:
+                          type: string
+                          description: Type of badge (e.g., employee, temporary, visitor)
+                        issue_date:
+                          type: string
+                          format: date
+                          description: Date when the badge was issued
+                        expiry_date:
+                          type: string
+                          format: date
+                          description: Date when the badge will expire (if applicable)
+                        status:
+                          type: string
+                          description: Current status of the badge
+              example:
+                badges:
+                  - badge_id: "B1001"
+                    type: "employee"
+                    issue_date: "2024-01-15"
+                    expiry_date: "2026-01-15"
+                    status: "active"
+                  - badge_id: "B1002"
+                    type: "temporary"
+                    issue_date: "2025-03-20"
+                    expiry_date: "2025-05-20"
+                    status: "active"
+        '401':
+          description: Unauthorized, invalid or expired token
+        '404':
+          description: User not found
+    post:
+      summary: Assign badge
+      description: Creates and assigns a new badge to a specific user identified by their unique ID.
+      tags:
+      - Identity & Badge Management
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        description: Unique identifier of the user
+        schema:
+          type: string
+        example: "12345"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                badge_type:
+                  type: string
+                  description: Type of badge to issue
+                  enum: ["employee", "contractor", "temporary", "visitor"]
+                expiry_date:
+                  type: string
+                  format: date
+                  description: Date when the badge will expire (required for temporary badges)
+                access_level:
+                  type: string
+                  description: Access level for the badge
+                  enum: ["standard", "restricted", "elevated", "admin"]
+              required:
+                - badge_type
+            example:
+              badge_type: "contractor"
+              expiry_date: "2025-12-31"
+              access_level: "restricted"
+      responses:
+        '201':
+          description: Badge assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  badge_id:
+                    type: string
+                    description: Unique identifier for the newly created badge
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                badge_id: "B1003"
+                message: "Badge successfully assigned"
+        '400':
+          description: Invalid request parameters
+        '401':
+          description: Unauthorized, invalid or expired token
+        '404':
+          description: User not found
+  /v1/badges/{badge_id}:
+    get:
+      summary: Get badge details
+      description: Gets detailed information about a specific badge identified by its unique ID.
+      tags:
+      - Identity & Badge Management
+      parameters:
+      - name: badge_id
+        in: path
+        required: true
+        description: Unique identifier of the badge
+        schema:
+          type: string
+        example: "B1001"
+      responses:
+        '200':
+          description: Badge details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  badge_id:
+                    type: string
+                    description: Unique identifier for the badge
+                  user_id:
+                    type: string
+                    description: ID of the user this badge is assigned to
+                  type:
+                    type: string
+                    description: Type of badge
+                  issue_date:
+                    type: string
+                    format: date
+                    description: Date when the badge was issued
+                  expiry_date:
+                    type: string
+                    format: date
+                    description: Date when the badge will expire (if applicable)
+                  status:
+                    type: string
+                    description: Current status of the badge
+                  access_level:
+                    type: string
+                    description: Access level for the badge
+                  last_used:
+                    type: string
+                    format: date-time
+                    description: Timestamp when the badge was last used for access
+              example:
+                badge_id: "B1001"
+                user_id: "12345"
+                type: "employee"
+                issue_date: "2024-01-15"
+                expiry_date: "2026-01-15"
+                status: "active"
+                access_level: "standard"
+                last_used: "2025-04-24T16:42:11Z"
+        '401':
+          description: Unauthorized, invalid or expired token
+        '404':
+          description: Badge not found
+    patch:
+      summary: Update badge
+      description: Updates information about a specific badge identified by its unique ID.
+      tags:
+      - Identity & Badge Management
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: badge_id
+        in: path
+        required: true
+        description: Unique identifier of the badge
+        schema:
+          type: string
+        example: "B1001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  description: New status for the badge
+                  enum: ["active", "suspended", "expired"]
+                access_level:
+                  type: string
+                  description: New access level for the badge
+                  enum: ["standard", "restricted", "elevated", "admin"]
+                expiry_date:
+                  type: string
+                  format: date
+                  description: New expiry date for the badge
+            example:
+              status: "active"
+              access_level: "elevated"
+              expiry_date: "2026-04-30"
+      responses:
+        '200':
+          description: Badge updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  badge_id:
+                    type: string
+                    description: ID of the updated badge
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                badge_id: "B1001"
+                message: "Badge successfully updated"
+        '400':
+          description: Invalid request parameters
+        '401':
+          description: Unauthorized, invalid or expired token
+        '404':
+          description: Badge not found
+    delete:
+      summary: Revoke badge
+      description: Revokes or deactivates a specific badge identified by its unique ID.
+      tags:
+      - Identity & Badge Management
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: badge_id
+        in: path
+        required: true
+        description: Unique identifier of the badge to revoke
+        schema:
+          type: string
+        example: "B1001"
+      - name: reason
+        in: query
+        required: false
+        description: Reason for badge revocation
+        schema:
+          type: string
+        example: "Employee termination"
+      responses:
+        '204':
+          description: Badge deactivated
+        '401':
+          description: Unauthorized, invalid or expired token
+        '404':
+          description: Badge not found
+  /v1/events/access:
+    post:
+      summary: Log access event
+      description: Records an access attempt event with details about the badge, resource, and success/failure status.
+      tags:
+      - Access Logs & Events
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                badge_id:
+                  type: string
+                  description: ID of the badge used in the access attempt
+                resource_id:
+                  type: string
+                  description: ID of the resource or access point
+                timestamp:
+                  type: string
+                  format: date-time
+                  description: Time of the access attempt (defaults to current time if not provided)
+                access_granted:
+                  type: boolean
+                  description: Whether access was granted or denied
+                reason:
+                  type: string
+                  description: Reason for access denial (if applicable)
+              required:
+                - badge_id
+                - resource_id
+            example:
+              badge_id: "B1001"
+              resource_id: "D105"
+              timestamp: "2025-04-25T10:15:23Z"
+              access_granted: true
+      responses:
+        '201':
+          description: Access logged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                message: "Access logged successfully"
+        '400':
+          description: Invalid request parameters
+        '401':
+          description: Unauthorized, invalid or expired token
+        '404':
+          description: Badge or resource not found
+    get:
+      summary: Query access logs
+      description: Retrieves access log events filtered by various criteria such as user, badge, or room.
+      tags:
+      - Access Logs & Events
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: user
+        in: query
+        schema:
+          type: string
+        description: Filter logs by user ID
+        example: "12345"
+      - name: badge
+        in: query
+        schema:
+          type: string
+        description: Filter logs by badge ID
+        example: "B1001"
+      - name: room
+        in: query
+        schema:
+          type: string
+        description: Filter logs by room or door ID
+        example: "D105"
+      - name: from_date
+        in: query
+        schema:
+          type: string
+          format: date
+        description: Filter logs from this date (inclusive)
+        example: "2025-04-01"
+      - name: to_date
+        in: query
+        schema:
+          type: string
+          format: date
+        description: Filter logs until this date (inclusive)
+        example: "2025-04-25"
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum: ["success", "denied", "all"]
+        description: Filter by access status
+        example: "all"
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 100
+        description: Maximum number of records to return
+        example: 50
+      responses:
+        '200':
+          description: Filtered access logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_count:
+                    type: integer
+                    description: Total number of matching records
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        event_id:
+                          type: string
+                          description: Unique ID of the access event
+                        badge_id:
+                          type: string
+                          description: ID of the badge used
+                        user_id:
+                          type: string
+                          description: ID of the user associated with the badge
+                        user_name:
+                          type: string
+                          description: Name of the user
+                        door_id:
+                          type: string
+                          description: ID of the access point
+                        door_name:
+                          type: string
+                          description: Name of the access point
+                        timestamp:
+                          type: string
+                          format: date-time
+                          description: Time of the access attempt
+                        success:
+                          type: boolean
+                          description: Whether access was granted
+                        reason:
+                          type: string
+                          description: Reason for access denial (if applicable)
+              example:
+                total_count: 2
+                events:
+                  - event_id: "E2025042500123"
+                    badge_id: "B1001"
+                    user_id: "12345"
+                    user_name: "John Doe"
+                    door_id: "D105"
+                    door_name: "Main Entrance"
+                    timestamp: "2025-04-25T10:15:23Z"
+                    success: true
+                    reason: null
+                  - event_id: "E2025042500124"
+                    badge_id: "B1001"
+                    user_id: "12345"
+                    user_name: "John Doe"
+                    door_id: "D203"
+                    door_name: "Server Room"
+                    timestamp: "2025-04-25T10:45:12Z"
+                    success: false
+                    reason: "Insufficient access rights"
+        '401':
+          description: Unauthorized, invalid or expired token
+  /v1/zones:
+    get:
+      summary: List zones
+      description: Retrieves a list of all access control zones defined in the facility.
+      tags:
+      - Zone & Resource Control
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: type
+        in: query
+        required: false
+        description: Filter zones by type
+        schema:
+          type: string
+          enum: ["secure", "public", "restricted", "all"]
+        example: "all"
+      - name: active
+        in: query
+        required: false
+        description: Filter zones by active status
+        schema:
+          type: boolean
+        example: true
+      responses:
+        '200':
+          description: Zones listed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  zones:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        zone_id:
+                          type: string
+                          description: Unique identifier for the zone
+                        name:
+                          type: string
+                          description: Human-readable name of the zone
+                        type:
+                          type: string
+                          description: Classification of the zone
+                        description:
+                          type: string
+                          description: Detailed description of the zone
+                        parent_zone_id:
+                          type: string
+                          description: ID of the parent zone, if applicable
+                        active:
+                          type: boolean
+                          description: Whether the zone is currently active
+              example:
+                zones:
+                  - zone_id: "Z101"
+                    name: "Research Wing"
+                    type: "restricted"
+                    description: "Research laboratories and facilities"
+                    parent_zone_id: "Z100"
+                    active: true
+                  - zone_id: "Z102"
+                    name: "Administrative Offices"
+                    type: "secure"
+                    description: "Main administrative area"
+                    parent_zone_id: "Z100"
+                    active: true
+        '401':
+          description: Unauthorized, invalid or expired token
+  /v1/zones/{zone_id}/permissions:
+    post:
+      summary: Modify zone access
+      description: Assigns or removes zone access permissions for specific users, badges, or roles.
+      tags:
+      - Zone & Resource Control
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        description: Unique identifier of the zone
+        schema:
+          type: string
+        example: "Z101"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  description: Whether to grant or revoke access
+                  enum: ["grant", "revoke"]
+                target_type:
+                  type: string
+                  description: Type of entity receiving permissions
+                  enum: ["user", "badge", "role"]
+                target_id:
+                  type: string
+                  description: ID of the user, badge, or role
+                access_level:
+                  type: string
+                  description: Level of access to grant
+                  enum: ["view", "entry", "admin"]
+                time_restrictions:
+                  type: object
+                  description: Optional time-based restrictions
+                  properties:
+                    start_time:
+                      type: string
+                      format: time
+                      description: Start time for access (24h format)
+                    end_time:
+                      type: string
+                      format: time
+                      description: End time for access (24h format)
+                    days_of_week:
+                      type: array
+                      items:
+                        type: string
+                        enum: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+              required:
+                - action
+                - target_type
+                - target_id
+            example:
+              action: "grant"
+              target_type: "user"
+              target_id: "12345"
+              access_level: "entry"
+              time_restrictions:
+                start_time: "08:00"
+                end_time: "18:00"
+                days_of_week: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+      responses:
+        '204':
+          description: Permissions updated
+        '400':
+          description: Invalid request parameters
+        '401':
+          description: Unauthorized, invalid or expired token
+        '404':
+          description: Zone or target not found
+  /v1/visitors:
+    get:
+      summary: List visitors
+      description: Retrieves a list of all visitors currently on the premises or filtered by active status.
+      tags:
+      - Visitor & Sponsorship Management
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: active
+        in: query
+        schema:
+          type: boolean
+        description: Filter by active visitor status (true = currently checked in)
+        example: true
+      - name: date
+        in: query
+        schema:
+          type: string
+          format: date
+        description: Filter by visit date
+        example: "2025-04-25"
+      responses:
+        '200':
+          description: List of active visitors
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  visitors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        visitor_id:
+                          type: string
+                          description: Unique identifier for the visitor
+                        full_name:
+                          type: string
+                          description: Visitor's full name
+                        company:
+                          type: string
+                          description: Visitor's company or organization
+                        sponsor_id:
+                          type: string
+                          description: ID of the employee sponsoring this visitor
+                        sponsor_name:
+                          type: string
+                          description: Name of the employee sponsoring this visitor
+                        check_in_time:
+                          type: string
+                          format: date-time
+                          description: When the visitor checked in
+                        expected_checkout:
+                          type: string
+                          format: date-time
+                          description: Expected checkout time
+                        status:
+                          type: string
+                          description: Current status of the visitor
+              example:
+                visitors:
+                  - visitor_id: "V2025042501"
+                    full_name: "Jane Smith"
+                    company: "Acme Corp"
+                    sponsor_id: "12345"
+                    sponsor_name: "John Doe"
+                    check_in_time: "2025-04-25T09:15:00Z"
+                    expected_checkout: "2025-04-25T17:00:00Z"
+                    status: "active"
+                  - visitor_id: "V2025042502"
+                    full_name: "Robert Johnson"
+                    company: "XYZ Inc"
+                    sponsor_id: "12346"
+                    sponsor_name: "Sarah Williams"
+                    check_in_time: "2025-04-25T10:30:00Z"
+                    expected_checkout: "2025-04-25T16:00:00Z"
+                    status: "active"
+        '401':
+          description: Unauthorized, invalid or expired token
+  /v1/visitors/{visitor_id}/checkin:
+    post:
+      summary: Check in visitor
+      description: Records a visitor check-in event, updating their status to active in the facility.
+      tags:
+      - Visitor & Sponsorship Management
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: visitor_id
+        in: path
+        required: true
+        description: Unique identifier of the visitor
+        schema:
+          type: string
+        example: "V2025042501"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: Entry point or location where visitor checked in
+                check_in_time:
+                  type: string
+                  format: date-time
+                  description: Time of check-in (defaults to current time if not provided)
+                expected_duration:
+                  type: integer
+                  description: Expected visit duration in hours
+                notes:
+                  type: string
+                  description: Any additional notes about the visit
+              required:
+                - location
+            example:
+              location: "Main Lobby"
+              expected_duration: 8
+              notes: "Meeting with Engineering team"
+      responses:
+        '200':
+          description: Check-in recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  visitor_id:
+                    type: string
+                    description: Visitor ID
+                  check_in_time:
+                    type: string
+                    format: date-time
+                    description: Timestamp of check-in
+                  expected_checkout:
+                    type: string
+                    format: date-time
+                    description: Expected checkout time
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                visitor_id: "V2025042501"
+                check_in_time: "2025-04-25T09:15:00Z"
+                expected_checkout: "2025-04-25T17:15:00Z"
+                message: "Visitor successfully checked in"
+        '400':
+          description: Invalid request parameters
+        '401':
+          description: Unauthorized, invalid or expired token
+        '404':
+          description: Visitor not found
+        '409':
+          description: Visitor already checked in
+  /v1/users/{sponsor_id}/visitors:
+    get:
+      summary: List sponsored visitors
+      description: Retrieves all visitors that are currently being sponsored by a specific user.
+      tags:
+      - Visitor & Sponsorship Management
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: sponsor_id
+        in: path
+        required: true
+        description: Unique identifier of the sponsoring user
+        schema:
+          type: string
+        example: "12345"
+      - name: status
+        in: query
+        required: false
+        description: Filter visitors by status
+        schema:
+          type: string
+          enum: ["active", "checked-out", "pending", "all"]
+        example: "active"
+      - name: date
+        in: query
+        required: false
+        description: Filter by specific date
+        schema:
+          type: string
+          format: date
+        example: "2025-04-25"
+      responses:
+        '200':
+          description: Sponsored visitors returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  visitors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        visitor_id:
+                          type: string
+                          description: Unique identifier for the visitor
+                        full_name:
+                          type: string
+                          description: Visitor's full name
+                        company:
+                          type: string
+                          description: Visitor's company or organization
+                        check_in_time:
+                          type: string
+                          format: date-time
+                          description: When the visitor checked in
+                        check_out_time:
+                          type: string
+                          format: date-time
+                          description: When the visitor checked out (if applicable)
+                        status:
+                          type: string
+                          description: Current status of the visitor
+                        badge_id:
+                          type: string
+                          description: ID of any badge issued to this visitor
+              example:
+                visitors:
+                  - visitor_id: "V2025042501"
+                    full_name: "Jane Smith"
+                    company: "Acme Corp"
+                    check_in_time: "2025-04-25T09:15:00Z"
+                    check_out_time: null
+                    status: "active"
+                    badge_id: "B5001"
+        '401':
+          description: Unauthorized, invalid or expired token
+        '404':
+          description: Sponsor not found
+  /v1/policies:
+    get:
+      summary: List policies
+      description: Retrieves a list of all access control policies configured in the system.
+      tags:
+      - Policy Enforcement
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        description: Filter policies by status
+        schema:
+          type: string
+          enum: ["active", "inactive", "all"]
+        example: "active"
+      - name: type
+        in: query
+        required: false
+        description: Filter policies by type
+        schema:
+          type: string
+        example: "time-based"
+      responses:
+        '200':
+          description: Policies listed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policies:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        policy_id:
+                          type: string
+                          description: Unique identifier for the policy
+                        name:
+                          type: string
+                          description: Human-readable name of the policy
+                        description:
+                          type: string
+                          description: Detailed description of what the policy enforces
+                        type:
+                          type: string
+                          description: Type of policy
+                        status:
+                          type: string
+                          description: Whether the policy is active or inactive
+                        created_at:
+                          type: string
+                          format: date-time
+                          description: When the policy was created
+                        modified_at:
+                          type: string
+                          format: date-time
+                          description: When the policy was last modified
+              example:
+                policies:
+                  - policy_id: "P101"
+                    name: "After-hours Access"
+                    description: "Restricts access to authorized personnel during non-business hours"
+                    type: "time-based"
+                    status: "active"
+                    created_at: "2024-12-10T14:30:00Z"
+                    modified_at: "2025-01-15T10:22:45Z"
+                  - policy_id: "P102"
+                    name: "Visitor Escort Required"
+                    description: "Visitors must be escorted in secure areas"
+                    type: "escort"
+                    status: "active"
+                    created_at: "2024-12-11T09:15:00Z"
+                    modified_at: "2024-12-11T09:15:00Z"
+        '401':
+          description: Unauthorized, invalid or expired token
+    post:
+      summary: Create policy
+      description: Creates a new access control policy with specified rules and conditions.
+      tags:
+      - Policy Enforcement
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Name of the policy
+                description:
+                  type: string
+                  description: Detailed description of the policy
+                type:
+                  type: string
+                  description: Type of policy being created
+                  enum: ["time-based", "zone-based", "role-based", "escort", "custom"]
+                conditions:
+                  type: object
+                  description: Specific conditions for policy enforcement
+                  properties:
+                    zone_ids:
+                      type: array
+                      items:
+                        type: string
+                      description: Zones affected by this policy
+                    role_ids:
+                      type: array
+                      items:
+                        type: string
+                      description: Roles affected by this policy
+                    time_restrictions:
+                      type: object
+                      properties:
+                        start_time:
+                          type: string
+                          format: time
+                          description: Start time (24h format)
+                        end_time:
+                          type: string
+                          format: time
+                          description: End time (24h format)
+                        days:
+                          type: array
+                          items:
+                            type: string
+                          description: Days when the policy applies
+                status:
+                  type: string
+                  description: Initial status of the policy
+                  enum: ["active", "inactive"]
+              required:
+                - name
+                - type
+            example:
+              name: "Weekend Access Restrictions"
+              description: "Limits access to sensitive areas during weekends"
+              type: "time-based"
+              conditions:
+                zone_ids: ["Z101", "Z103", "Z105"]
+                role_ids: ["standard", "visitor"]
+                time_restrictions:
+                  start_time: "17:00"
+                  end_time: "08:00"
+                  days: ["saturday", "sunday"]
+              status: "active"
+      responses:
+        '201':
+          description: Policy created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policy_id:
+                    type: string
+                    description: Unique identifier for the created policy
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                policy_id: "P103"
+                message: "Policy successfully created"
+        '400':
+          description: Invalid request parameters
+        '401':
+          description: Unauthorized, invalid or expired token
+  /v1/emergency/lockdown:
+    post:
+      summary: Trigger lockdown
+      description: Initiates an emergency lockdown across all facility doors and access points.
+      tags:
+      - Emergency Response & Monitoring
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Reason for initiating the lockdown
+                level:
+                  type: string
+                  description: Severity level of the lockdown
+                  enum: ["soft", "hard", "complete"]
+                initiated_by:
+                  type: string
+                  description: ID of the user initiating the lockdown
+              required:
+                - reason
+                - level
+            example:
+              reason: "Security threat detected"
+              level: "hard"
+              initiated_by: "12345"
+      responses:
+        '200':
+          description: Lockdown initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lockdown_id:
+                    type: string
+                    description: Unique identifier for the lockdown event
+                  timestamp:
+                    type: string
+                    format: date-time
+                    description: Time when lockdown was initiated
+                  status:
+                    type: string
+                    description: Current status of the lockdown
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                lockdown_id: "LD202504251145"
+                timestamp: "2025-04-25T11:45:23Z"
+                status: "active"
+                message: "Facility lockdown successfully initiated"
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions to initiate lockdown
+  /v1/monitoring/active_users:
+    get:
+      summary: List active occupants
+      description: Retrieves a complete list of all personnel (employees and visitors) currently inside the facility.
+      tags:
+      - Emergency Response & Monitoring
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: zone_id
+        in: query
+        required: false
+        description: Filter by specific zone
+        schema:
+          type: string
+        example: "Z101"
+      - name: user_type
+        in: query
+        required: false
+        description: Filter by user type
+        schema:
+          type: string
+          enum: ["employee", "contractor", "visitor", "all"]
+        example: "all"
+      responses:
+        '200':
+          description: List of occupants
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_count:
+                    type: integer
+                    description: Total count of people in the facility
+                  users:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        user_id:
+                          type: string
+                          description: Unique identifier for the user
+                        badge_id:
+                          type: string
+                          description: Badge identifier
+                        full_name:
+                          type: string
+                          description: Full name of the person
+                        type:
+                          type: string
+                          description: Type of user (employee, visitor, etc.)
+                        zone_id:
+                          type: string
+                          description: ID of the zone they were last seen in
+                        zone_name:
+                          type: string
+                          description: Name of the zone they were last seen in
+                        last_access_time:
+                          type: string
+                          format: date-time
+                          description: Timestamp of their last access action
+              example:
+                total_count: 45
+                users:
+                  - user_id: "12345"
+                    badge_id: "B1001"
+                    full_name: "John Doe"
+                    type: "employee"
+                    zone_id: "Z102"
+                    zone_name: "Administrative Offices"
+                    last_access_time: "2025-04-25T10:45:12Z"
+                  - user_id: "V2025042501"
+                    badge_id: "B5001"
+                    full_name: "Jane Smith"
+                    type: "visitor"
+                    zone_id: "Z101"
+                    zone_name: "Research Wing"
+                    last_access_time: "2025-04-25T11:20:33Z"
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+  /v1/emergency/unlock:
+    post:
+      summary: Emergency unlock
+      description: Emergency override to unlock all doors in a specified zone, typically used during evacuations or other emergencies.
+      tags:
+      - Emergency Response & Monitoring
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: zone
+        in: query
+        required: true
+        description: Zone ID to unlock
+        schema:
+          type: string
+        example: "Z101"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Reason for emergency unlock
+                override_key:
+                  type: string
+                  description: Security override key (required for certain access levels)
+                initiated_by:
+                  type: string
+                  description: ID of the user initiating the unlock
+              required:
+                - reason
+                - initiated_by
+            example:
+              reason: "Fire alarm activated"
+              initiated_by: "12345"
+      responses:
+        '200':
+          description: Zone unlocked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  zone_id:
+                    type: string
+                    description: ID of the unlocked zone
+                  doors_affected:
+                    type: integer
+                    description: Number of doors unlocked
+                  status:
+                    type: string
+                    description: Status of the unlock operation
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                zone_id: "Z101"
+                doors_affected: 8
+                status: "unlocked"
+                message: "All doors in zone successfully unlocked"
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Zone not found
+  /v1/emergency/evacuation/status:
+    get:
+      summary: Get evacuation status
+      description: Provides a list of all personnel still present in the facility during an active evacuation event.
+      tags:
+      - Emergency Response & Monitoring
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: zone_id
+        in: query
+        required: false
+        description: Filter by specific zone
+        schema:
+          type: string
+        example: "Z101"
+      - name: priority
+        in: query
+        required: false
+        description: Filter by evacuation priority level
+        schema:
+          type: string
+          enum: ["high", "medium", "low", "all"]
+        example: "all"
+      responses:
+        '200':
+          description: List of users currently marked as inside
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  evacuation_id:
+                    type: string
+                    description: Unique identifier for the evacuation event
+                  start_time:
+                    type: string
+                    format: date-time
+                    description: When the evacuation was initiated
+                  status:
+                    type: string
+                    description: Current status of the evacuation
+                  remaining_count:
+                    type: integer
+                    description: Number of people still inside
+                  personnel:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        user_id:
+                          type: string
+                          description: Unique identifier for the user
+                        full_name:
+                          type: string
+                          description: Person's full name
+                        type:
+                          type: string
+                          description: Type of personnel (employee, visitor, etc.)
+                        badge_id:
+                          type: string
+                          description: ID of the person's badge
+                        last_known_zone:
+                          type: string
+                          description: ID of zone where person was last detected
+                        zone_name:
+                          type: string
+                          description: Name of zone where person was last detected
+                        last_seen:
+                          type: string
+                          format: date-time
+                          description: Timestamp when person was last detected
+                        evacuation_status:
+                          type: string
+                          description: Person's current evacuation status
+              example:
+                evacuation_id: "EVAC202504251145"
+                start_time: "2025-04-25T11:45:00Z"
+                status: "active"
+                remaining_count: 3
+                personnel:
+                  - user_id: "12345"
+                    full_name: "John Doe"
+                    type: "employee"
+                    badge_id: "B1001"
+                    last_known_zone: "Z103"
+                    zone_name: "Server Room"
+                    last_seen: "2025-04-25T11:43:22Z"
+                    evacuation_status: "not_confirmed"
+                  - user_id: "V2025042501"
+                    full_name: "Jane Smith"
+                    type: "visitor"
+                    badge_id: "B5001"
+                    last_known_zone: "Z101"
+                    zone_name: "Research Wing"
+                    last_seen: "2025-04-25T11:44:10Z"
+                    evacuation_status: "not_confirmed"
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: No active evacuation
+  /v1/emergency/evacuation/override-exit:
+    post:
+      summary: Override evacuation status
+      description: Allows an authorized manager to manually mark a person as having exited the facility during an evacuation.
+      tags:
+      - Emergency Response & Monitoring
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: string
+                  description: ID of the user to mark as exited
+                manager_id:
+                  type: string
+                  description: ID of the manager authorizing the override
+                reason:
+                  type: string
+                  description: Reason for the manual override
+                evidence:
+                  type: string
+                  description: Optional evidence supporting the override decision
+              required:
+              - user_id
+              - manager_id
+              - reason
+            example:
+              user_id: "12345"
+              manager_id: "12346"
+              reason: "Visual confirmation of exit via north stairwell"
+              evidence: "Verbal confirmation from security at checkpoint B"
+      responses:
+        '200':
+          description: User marked as exited
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                    description: ID of the user marked as exited
+                  override_time:
+                    type: string
+                    format: date-time
+                    description: Time when the override was recorded
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                user_id: "12345"
+                override_time: "2025-04-25T12:03:45Z"
+                message: "User successfully marked as exited"
+        '400':
+          description: Invalid request parameters
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions for override
+        '404':
+          description: User not found
+  /v1/emergency/evacuation/reset:
+    post:
+      summary: Reset evacuation
+      description: Resets the evacuation status for all personnel, typically used after an evacuation drill or when the emergency situation has been resolved.
+      tags:
+      - Emergency Response & Monitoring
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                evacuation_id:
+                  type: string
+                  description: ID of the evacuation event to reset
+                authorized_by:
+                  type: string
+                  description: ID of the user authorizing the reset
+                notes:
+                  type: string
+                  description: Notes about the evacuation resolution
+              required:
+                - evacuation_id
+                - authorized_by
+            example:
+              evacuation_id: "EVAC202504251145"
+              authorized_by: "12345"
+              notes: "Drill completed successfully, all personnel accounted for"
+      responses:
+        '200':
+          description: Evacuation status reset for all users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  evacuation_id:
+                    type: string
+                    description: ID of the evacuation that was reset
+                  reset_time:
+                    type: string
+                    format: date-time
+                    description: Time when the evacuation was reset
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                evacuation_id: "EVAC202504251145"
+                reset_time: "2025-04-25T12:15:00Z"
+                message: "Evacuation status successfully reset for all users"
+        '400':
+          description: Invalid request parameters
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Evacuation event not found
+  /v1/emergency/report:
+    get:
+      summary: Generate emergency report
+      description: Creates a comprehensive report of all personnel movements during an emergency event, useful for post-incident analysis.
+      tags:
+      - Emergency Response & Monitoring
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: event_id
+        in: query
+        required: true
+        description: ID of the emergency event to generate a report for
+        schema:
+          type: string
+        example: "EVAC202504251145"
+      - name: format
+        in: query
+        required: false
+        description: Format of the report
+        schema:
+          type: string
+          enum: ["json", "csv", "pdf"]
+          default: "json"
+        example: "json"
+      responses:
+        '200':
+          description: Emergency report generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  report_id:
+                    type: string
+                    description: Unique identifier for the generated report
+                  event_id:
+                    type: string
+                    description: ID of the emergency event
+                  generated_at:
+                    type: string
+                    format: date-time
+                    description: When the report was generated
+                  event_type:
+                    type: string
+                    description: Type of emergency event
+                  start_time:
+                    type: string
+                    format: date-time
+                    description: When the emergency event started
+                  end_time:
+                    type: string
+                    format: date-time
+                    description: When the emergency event ended
+                  total_personnel:
+                    type: integer
+                    description: Total number of personnel involved
+                  evacuated_count:
+                    type: integer
+                    description: Number of personnel successfully evacuated
+                  incidents:
+                    type: array
+                    description: List of notable incidents during the event
+                    items:
+                      type: object
+                      properties:
+                        time:
+                          type: string
+                          format: date-time
+                          description: Time of the incident
+                        description:
+                          type: string
+                          description: Description of the incident
+                        severity:
+                          type: string
+                          description: Severity level of the incident
+                  movements:
+                    type: array
+                    description: List of personnel movements during the event
+                    items:
+                      type: object
+                      properties:
+                        user_id:
+                          type: string
+                          description: ID of the user
+                        badge_id:
+                          type: string
+                          description: ID of the badge
+                        full_name:
+                          type: string
+                          description: Full name of the person
+                        access_points:
+                          type: array
+                          description: List of access points the person passed through
+                          items:
+                            type: object
+                            properties:
+                              door_id:
+                                type: string
+                                description: ID of the access point
+                              door_name:
+                                type: string
+                                description: Name of the access point
+                              timestamp:
+                                type: string
+                                format: date-time
+                                description: When the person passed through
+                              direction:
+                                type: string
+                                description: Direction of movement (in/out)
+              example:
+                report_id: "RPT202504251300"
+                event_id: "EVAC202504251145"
+                generated_at: "2025-04-25T13:00:23Z"
+                event_type: "Fire evacuation"
+                start_time: "2025-04-25T11:45:00Z"
+                end_time: "2025-04-25T12:15:00Z"
+                total_personnel: 45
+                evacuated_count: 45
+                incidents: [
+                  {
+                    "time": "2025-04-25T11:52:15Z",
+                    "description": "Assistance needed for mobility-impaired employee on floor 3",
+                    "severity": "medium"
+                  }
+                ]
+                movements: [
+                  {
+                    "user_id": "12345",
+                    "badge_id": "B1001",
+                    "full_name": "John Doe",
+                    "access_points": [
+                      {
+                        "door_id": "D203",
+                        "door_name": "Server Room Exit",
+                        "timestamp": "2025-04-25T11:46:22Z",
+                        "direction": "out"
+                      },
+                      {
+                        "door_id": "D105",
+                        "door_name": "Main Entrance",
+                        "timestamp": "2025-04-25T11:49:36Z",
+                        "direction": "out"
+                      }
+                    ]
+                  }
+                ]
+        '400':
+          description: Invalid request parameters
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Emergency event not found
+  /v1/auth/login:
+    post:
+      summary: Login
+      description: Legacy authentication endpoint that validates user credentials and returns a UUID4 token for API access.
+      tags:
+      - Authentication & Session Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  description: User's login name
+                password:
+                  type: string
+                  description: User's password
+              required:
+                - username
+                - password
+            example:
+              username: "john.doe"
+              password: "your-secure-password"
+      responses:
+        '200':
+          description: Authenticated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: UUID4 token for authentication
+                  expires_at:
+                    type: string
+                    format: date-time
+                    description: Token expiration timestamp
+              example:
+                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTIzNDU2Nzg5MCIsImV4cCI6MTY4MjUwNTYwMH0.aBcDeFgHiJkLmNoPqRsTuVwXyZ"
+                expires_at: "2025-04-26T14:30:00Z"
+        '401':
+          description: Invalid credentials
+  /v1/auth/logout:
+    post:
+      summary: Logout
+      description: Logs out the user by invalidating their current UUID4 token.
+      tags:
+      - Authentication & Session Management
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                message: "Successfully logged out"
+        '401':
+          description: Unauthorized, invalid or expired token
+  /v1/auth/me:
+    get:
+      summary: Get profile and roles
+      description: Retrieves the profile information and permission roles of the currently authenticated user.
+      tags:
+      - Authentication & Session Management
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                    description: Unique identifier for the user
+                  username:
+                    type: string
+                    description: User's login name
+                  email:
+                    type: string
+                    format: email
+                    description: User's email address
+                  full_name:
+                    type: string
+                    description: User's full name
+                  roles:
+                    type: array
+                    description: List of user roles and permissions
+                    items:
+                      type: string
+                  department:
+                    type: string
+                    description: User's department
+                  position:
+                    type: string
+                    description: User's position/title
+                  last_login:
+                    type: string
+                    format: date-time
+                    description: Timestamp of last successful login
+              example:
+                user_id: "12345"
+                username: "john.doe"
+                email: "john.doe@example.com"
+                full_name: "John Doe"
+                roles: ["employee", "access_admin", "emergency_responder"]
+                department: "Engineering"
+                position: "Senior Security Engineer"
+                last_login: "2025-04-25T08:30:45Z"
+        '401':
+          description: Unauthorized, invalid or expired token
+  /v1/users:
+    get:
+      summary: List all registered users
+      description: Retrieves a list of all users registered in the facility access system.
+      tags:
+      - Identity & Badge Management
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: role
+        in: query
+        required: false
+        description: Filter users by role
+        schema:
+          type: string
+        example: "admin"
+      - name: department
+        in: query
+        required: false
+        description: Filter users by department
+        schema:
+          type: string
+        example: "Engineering"
+      - name: active
+        in: query
+        required: false
+        description: Filter by active status
+        schema:
+          type: boolean
+        example: true
+      - name: limit
+        in: query
+        required: false
+        description: Maximum number of users to return
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 100
+        example: 50
+      - name: offset
+        in: query
+        required: false
+        description: Number of users to skip for pagination
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+        example: 0
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_count:
+                    type: integer
+                    description: Total number of matching users
+                  users:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        user_id:
+                          type: string
+                          description: Unique identifier for the user
+                        username:
+                          type: string
+                          description: User's login name
+                        full_name:
+                          type: string
+                          description: User's full name
+                        email:
+                          type: string
+                          format: email
+                          description: User's email address
+                        department:
+                          type: string
+                          description: User's department
+                        position:
+                          type: string
+                          description: User's job title or position
+                        roles:
+                          type: array
+                          items:
+                            type: string
+                          description: User's assigned roles
+                        active:
+                          type: boolean
+                          description: Whether the user account is active
+              example:
+                total_count: 2
+                users:
+                  - user_id: "12345"
+                    username: "john.doe"
+                    full_name: "John Doe"
+                    email: "john.doe@example.com"
+                    department: "Engineering"
+                    position: "Senior Security Engineer"
+                    roles: ["employee", "access_admin"]
+                    active: true
+                  - user_id: "12346"
+                    username: "sarah.williams"
+                    full_name: "Sarah Williams"
+                    email: "sarah.williams@example.com"
+                    department: "Operations"
+                    position: "Facility Manager"
+                    roles: ["employee", "emergency_responder"]
+                    active: true
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+  /v1/users/{user_id}:
+    get:
+      summary: Retrieve detailed user info
+      description: Gets comprehensive information about a specific user identified by their unique ID.
+      tags:
+      - Identity & Badge Management
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        description: Unique identifier of the user
+        schema:
+          type: string
+        example: "12345"
+      - name: include_badges
+        in: query
+        required: false
+        description: Whether to include the user's badges in the response
+        schema:
+          type: boolean
+        example: true
+      - name: include_access_history
+        in: query
+        required: false
+        description: Whether to include recent access history
+        schema:
+          type: boolean
+        example: false
+      responses:
+        '200':
+          description: User details returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                    description: Unique identifier for the user
+                  username:
+                    type: string
+                    description: User's login name
+                  full_name:
+                    type: string
+                    description: User's full name
+                  email:
+                    type: string
+                    format: email
+                    description: User's email address
+                  phone:
+                    type: string
+                    description: User's contact phone number
+                  department:
+                    type: string
+                    description: User's department
+                  position:
+                    type: string
+                    description: User's job title or position
+                  hire_date:
+                    type: string
+                    format: date
+                    description: User's hire date
+                  manager_id:
+                    type: string
+                    description: ID of the user's manager
+                  manager_name:
+                    type: string
+                    description: Name of the user's manager
+                  roles:
+                    type: array
+                    items:
+                      type: string
+                    description: User's assigned roles
+                  access_zones:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        zone_id:
+                          type: string
+                          description: ID of the zone
+                        name:
+                          type: string
+                          description: Name of the zone
+                        access_level:
+                          type: string
+                          description: User's access level for this zone
+                  badges:
+                    type: array
+                    description: List of badges assigned to the user (if requested)
+                    items:
+                      type: object
+                      properties:
+                        badge_id:
+                          type: string
+                          description: Badge identifier
+                        type:
+                          type: string
+                          description: Type of badge
+                        status:
+                          type: string
+                          description: Current status of the badge
+                  recent_access:
+                    type: array
+                    description: Recent access events (if requested)
+                    items:
+                      type: object
+                      properties:
+                        timestamp:
+                          type: string
+                          format: date-time
+                          description: Time of the access event
+                        location:
+                          type: string
+                          description: Location of access
+                        result:
+                          type: string
+                          description: Result of access attempt
+              example:
+                user_id: "12345"
+                username: "john.doe"
+                full_name: "John Doe"
+                email: "john.doe@example.com"
+                phone: "+1-555-123-4567"
+                department: "Engineering"
+                position: "Senior Security Engineer"
+                hire_date: "2023-06-15"
+                manager_id: "12347"
+                manager_name: "Michael Johnson"
+                roles: ["employee", "access_admin"]
+                access_zones: [
+                  {
+                    "zone_id": "Z101",
+                    "name": "Research Wing",
+                    "access_level": "admin"
+                  },
+                  {
+                    "zone_id": "Z102",
+                    "name": "Administrative Offices",
+                    "access_level": "standard"
+                  }
+                ]
+                badges: [
+                  {
+                    "badge_id": "B1001",
+                    "type": "employee",
+                    "status": "active"
+                  }
+                ]
+                recent_access: [
+                  {
+                    "timestamp": "2025-04-25T08:30:15Z",
+                    "location": "Main Entrance",
+                    "result": "granted"
+                  },
+                  {
+                    "timestamp": "2025-04-25T12:15:22Z",
+                    "location": "Server Room",
+                    "result": "granted"
+                  }
+                ]
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: User not found
+  /v1/zones/{zone_id}:
+    get:
+      summary: Retrieve metadata for a zone
+      description: Gets detailed information about a specific access control zone identified by its unique ID.
+      tags:
+      - Zone & Resource Control
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        description: Unique identifier of the zone
+        schema:
+          type: string
+        example: "Z101"
+      - name: include_resources
+        in: query
+        required: false
+        description: Whether to include resources in this zone
+        schema:
+          type: boolean
+        example: true
+      - name: include_access_rules
+        in: query
+        required: false
+        description: Whether to include access rules for this zone
+        schema:
+          type: boolean
+        example: false
+      responses:
+        '200':
+          description: Zone metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  zone_id:
+                    type: string
+                    description: Unique identifier for the zone
+                  name:
+                    type: string
+                    description: Human-readable name of the zone
+                  description:
+                    type: string
+                    description: Detailed description of the zone
+                  type:
+                    type: string
+                    description: Classification of the zone
+                  parent_zone_id:
+                    type: string
+                    description: ID of the parent zone, if applicable
+                  child_zones:
+                    type: array
+                    description: List of child zones, if any
+                    items:
+                      type: object
+                      properties:
+                        zone_id:
+                          type: string
+                          description: Child zone identifier
+                        name:
+                          type: string
+                          description: Name of the child zone
+                  active:
+                    type: boolean
+                    description: Whether the zone is currently active
+                  creation_date:
+                    type: string
+                    format: date
+                    description: When the zone was created
+                  resources:
+                    type: array
+                    description: Resources within this zone (if requested)
+                    items:
+                      type: object
+                      properties:
+                        resource_id:
+                          type: string
+                          description: Resource identifier
+                        name:
+                          type: string
+                          description: Resource name
+                        type:
+                          type: string
+                          description: Type of resource
+                  access_rules:
+                    type: array
+                    description: Access rules for this zone (if requested)
+                    items:
+                      type: object
+                      properties:
+                        rule_id:
+                          type: string
+                          description: Rule identifier
+                        description:
+                          type: string
+                          description: Description of the rule
+                        applies_to:
+                          type: array
+                          items:
+                            type: string
+                          description: Roles/groups the rule applies to
+              example:
+                zone_id: "Z101"
+                name: "Research Wing"
+                description: "Contains research laboratories and secure equipment"
+                type: "restricted"
+                parent_zone_id: "Z100"
+                child_zones: [
+                  {
+                    "zone_id": "Z101-A",
+                    "name": "Bioresearch Lab"
+                  },
+                  {
+                    "zone_id": "Z101-B",
+                    "name": "Electronics Lab"
+                  }
+                ]
+                active: true
+                creation_date: "2024-01-15"
+                resources: [
+                  {
+                    "resource_id": "R201",
+                    "name": "Microscope Station",
+                    "type": "equipment"
+                  },
+                  {
+                    "resource_id": "R202",
+                    "name": "Chemical Storage",
+                    "type": "storage"
+                  }
+                ]
+                access_rules: [
+                  {
+                    "rule_id": "AR301",
+                    "description": "Research staff only during business hours",
+                    "applies_to": ["researcher", "lab_manager"]
+                  },
+                  {
+                    "rule_id": "AR302",
+                    "description": "Lab managers only after hours",
+                    "applies_to": ["lab_manager"]
+                  }
+                ]
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Zone not found
+  /v1/resources:
+    get:
+      summary: List access-controlled resources
+      description: Retrieves a list of all access-controlled resources in the facility.
+      tags:
+      - Zone & Resource Control
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: zone_id
+        in: query
+        required: false
+        description: Filter resources by zone
+        schema:
+          type: string
+        example: "Z101"
+      - name: type
+        in: query
+        required: false
+        description: Filter resources by type
+        schema:
+          type: string
+        example: "equipment"
+      - name: status
+        in: query
+        required: false
+        description: Filter resources by status
+        schema:
+          type: string
+          enum: ["available", "maintenance", "reserved", "all"]
+        example: "available"
+      responses:
+        '200':
+          description: List of resources
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_count:
+                    type: integer
+                    description: Total number of matching resources
+                  resources:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        resource_id:
+                          type: string
+                          description: Unique identifier for the resource
+                        name:
+                          type: string
+                          description: Name of the resource
+                        description:
+                          type: string
+                          description: Detailed description of the resource
+                        type:
+                          type: string
+                          description: Type of resource
+                        zone_id:
+                          type: string
+                          description: ID of the zone this resource belongs to
+                        zone_name:
+                          type: string
+                          description: Name of the zone
+                        status:
+                          type: string
+                          description: Current status of the resource
+              example:
+                total_count: 2
+                resources:
+                  - resource_id: "R201"
+                    name: "Microscope Station"
+                    description: "High-power electron microscope"
+                    type: "equipment"
+                    zone_id: "Z101"
+                    zone_name: "Research Wing"
+                    status: "available"
+                  - resource_id: "R202"
+                    name: "Chemical Storage"
+                    type: "storage"
+                    description: "Secure chemical storage cabinet"
+                    zone_id: "Z101"
+                    zone_name: "Research Wing"
+                    status: "available"
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+  /v1/resources/{resource_id}:
+    get:
+      summary: Get metadata for a specific resource
+      description: Retrieves detailed information about a specific access-controlled resource identified by its unique ID.
+      tags:
+      - Zone & Resource Control
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: resource_id
+        in: path
+        required: true
+        description: Unique identifier of the resource
+        schema:
+          type: string
+        example: "R201"
+      - name: include_history
+        in: query
+        required: false
+        description: Whether to include usage history
+        schema:
+          type: boolean
+        example: false
+      responses:
+        '200':
+          description: Resource metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resource_id:
+                    type: string
+                    description: Unique identifier for the resource
+                  name:
+                    type: string
+                    description: Name of the resource
+                  description:
+                    type: string
+                    description: Detailed description of the resource
+                  type:
+                    type: string
+                    description: Type of resource
+                  zone_id:
+                    type: string
+                    description: ID of the zone this resource belongs to
+                  zone_name:
+                    type: string
+                    description: Name of the zone
+                  status:
+                    type: string
+                    description: Current status of the resource
+                  installation_date:
+                    type: string
+                    format: date
+                    description: When the resource was installed
+                  last_maintenance:
+                    type: string
+                    format: date
+                    description: Date of last maintenance
+                  next_maintenance:
+                    type: string
+                    format: date
+                    description: Scheduled date for next maintenance
+                  access_requirements:
+                    type: array
+                    description: Requirements to access this resource
+                    items:
+                      type: string
+                  current_reservation:
+                    type: object
+                    description: Current reservation details if applicable
+                    properties:
+                      user_id:
+                        type: string
+                        description: ID of the user with reservation
+                      user_name:
+                        type: string
+                        description: Name of the user
+                      start_time:
+                        type: string
+                        format: date-time
+                        description: Start time of reservation
+                      end_time:
+                        type: string
+                        format: date-time
+                        description: End time of reservation
+                  usage_history:
+                    type: array
+                    description: Recent usage history (if requested)
+                    items:
+                      type: object
+                      properties:
+                        timestamp:
+                          type: string
+                          format: date-time
+                          description: Time of usage
+                        user_id:
+                          type: string
+                          description: ID of the user
+                        user_name:
+                          type: string
+                          description: Name of the user
+                        action:
+                          type: string
+                          description: Action performed
+              example:
+                resource_id: "R201"
+                name: "Microscope Station"
+                description: "High-power electron microscope for research purposes"
+                type: "equipment"
+                zone_id: "Z101"
+                zone_name: "Research Wing"
+                status: "available"
+                installation_date: "2024-02-15"
+                last_maintenance: "2025-03-10"
+                next_maintenance: "2025-09-10"
+                access_requirements: ["research_certification", "safety_training"]
+                current_reservation: null
+                usage_history: [
+                  {
+                    "timestamp": "2025-04-24T14:30:00Z",
+                    "user_id": "12345",
+                    "user_name": "John Doe",
+                    "action": "used"
+                  },
+                  {
+                    "timestamp": "2025-04-23T10:15:00Z",
+                    "user_id": "12346",
+                    "user_name": "Sarah Williams",
+                    "action": "used"
+                  }
+                ]
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Resource not found
+  /v1/visitors/{visitor_id}:
+    get:
+      summary: Retrieve visitor details
+      description: Gets detailed information about a specific visitor identified by their unique ID.
+      tags:
+      - Visitor & Sponsorship Management
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: visitor_id
+        in: path
+        required: true
+        description: Unique identifier of the visitor
+        schema:
+          type: string
+        example: "V2025042501"
+      - name: include_access
+        in: query
+        required: false
+        description: Whether to include access history
+        schema:
+          type: boolean
+        example: true
+      responses:
+        '200':
+          description: Visitor info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  visitor_id:
+                    type: string
+                    description: Unique identifier for the visitor
+                  full_name:
+                    type: string
+                    description: Visitor's full name
+                  email:
+                    type: string
+                    format: email
+                    description: Visitor's email address
+                  phone:
+                    type: string
+                    description: Visitor's contact phone number
+                  company:
+                    type: string
+                    description: Visitor's company or organization
+                  reason:
+                    type: string
+                    description: Reason for the visit
+                  sponsor_id:
+                    type: string
+                    description: ID of the employee sponsoring this visitor
+                  sponsor_name:
+                    type: string
+                    description: Name of the employee sponsoring this visitor
+                  check_in_time:
+                    type: string
+                    format: date-time
+                    description: When the visitor checked in
+                  check_out_time:
+                    type: string
+                    format: date-time
+                    description: When the visitor checked out (null if still active)
+                  expected_checkout:
+                    type: string
+                    format: date-time
+                    description: Expected checkout time
+                  status:
+                    type: string
+                    description: Current status of the visitor
+                  badge_id:
+                    type: string
+                    description: ID of any badge issued to this visitor
+                  authorized_zones:
+                    type: array
+                    description: Zones the visitor is authorized to access
+                    items:
+                      type: object
+                      properties:
+                        zone_id:
+                          type: string
+                          description: Zone identifier
+                        zone_name:
+                          type: string
+                          description: Zone name
+                  access_history:
+                    type: array
+                    description: Visitor's access history (if requested)
+                    items:
+                      type: object
+                      properties:
+                        timestamp:
+                          type: string
+                          format: date-time
+                          description: Time of access
+                        door_id:
+                          type: string
+                          description: ID of the door or access point
+                        door_name:
+                          type: string
+                          description: Name of the door or access point
+                        result:
+                          type: string
+                          description: Result of access attempt
+              example:
+                visitor_id: "V2025042501"
+                full_name: "Jane Smith"
+                email: "jane.smith@acmecorp.com"
+                phone: "+1-555-987-6543"
+                company: "Acme Corp"
+                reason: "Quarterly business review meeting"
+                sponsor_id: "12345"
+                sponsor_name: "John Doe"
+                check_in_time: "2025-04-25T09:15:00Z"
+                check_out_time: null
+                expected_checkout: "2025-04-25T17:00:00Z"
+                status: "active"
+                badge_id: "B5001"
+                authorized_zones: [
+                  {
+                    "zone_id": "Z102",
+                    "zone_name": "Administrative Offices"
+                  },
+                  {
+                    "zone_id": "Z103",
+                    "zone_name": "Conference Rooms"
+                  }
+                ]
+                access_history: [
+                  {
+                    "timestamp": "2025-04-25T09:15:30Z",
+                    "door_id": "D105",
+                    "door_name": "Main Entrance",
+                    "result": "granted"
+                  },
+                  {
+                    "timestamp": "2025-04-25T09:18:45Z",
+                    "door_id": "D205",
+                    "door_name": "Conference Room A",
+                    "result": "granted"
+                  }
+                ]
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Visitor not found
+  /v1/visitors/{visitor_id}/badge:
+    post:
+      summary: Issue temporary badge for a visitor
+      description: Creates and assigns a temporary access badge to a visitor for facility access.
+      tags:
+      - Visitor & Sponsorship Management
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: visitor_id
+        in: path
+        required: true
+        description: Unique identifier of the visitor
+        schema:
+          type: string
+        example: "V2025042501"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                access_level:
+                  type: string
+                  description: Access level for the visitor badge
+                  enum: ["restricted", "escorted", "standard"]
+                valid_until:
+                  type: string
+                  format: date-time
+                  description: Expiration time for the badge
+                authorized_zones:
+                  type: array
+                  description: Zones the visitor is authorized to access
+                  items:
+                    type: string
+                requires_escort:
+                  type: boolean
+                  description: Whether the visitor requires an escort
+              required:
+                - access_level
+                - valid_until
+            example:
+              access_level: "escorted"
+              valid_until: "2025-04-25T17:00:00Z"
+              authorized_zones: ["Z102", "Z103"]
+              requires_escort: true
+      responses:
+        '201':
+          description: Badge issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  badge_id:
+                    type: string
+                    description: Unique identifier for the issued badge
+                  visitor_id:
+                    type: string
+                    description: ID of the visitor
+                  access_level:
+                    type: string
+                    description: Assigned access level
+                  issue_time:
+                    type: string
+                    format: date-time
+                    description: When the badge was issued
+                  valid_until:
+                    type: string
+                    format: date-time
+                    description: When the badge expires
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                badge_id: "B5001"
+                visitor_id: "V2025042501"
+                access_level: "escorted"
+                issue_time: "2025-04-25T09:20:00Z"
+                valid_until: "2025-04-25T17:00:00Z"
+                message: "Temporary badge successfully issued"
+        '400':
+          description: Invalid request parameters
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Visitor not found
+        '409':
+          description: Visitor already has an active badge
+  /v1/visitors/{visitor_id}/checkout:
+    post:
+      summary: Mark visitor as checked out
+      description: Records a visitor checkout event, updating their status and deactivating any temporary badges.
+      tags:
+      - Visitor & Sponsorship Management
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: visitor_id
+        in: path
+        required: true
+        description: Unique identifier of the visitor
+        schema:
+          type: string
+        example: "V2025042501"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                checkout_time:
+                  type: string
+                  format: date-time
+                  description: Time of checkout (defaults to current time if not provided)
+                location:
+                  type: string
+                  description: Exit point or location where visitor checked out
+                notes:
+                  type: string
+                  description: Any additional notes about the checkout
+              required:
+                - location
+            example:
+              location: "Main Lobby"
+              notes: "Completed meeting with Engineering team"
+      responses:
+        '200':
+          description: Check-out recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  visitor_id:
+                    type: string
+                    description: Visitor ID
+                  checkout_time:
+                    type: string
+                    format: date-time
+                    description: Timestamp of checkout
+                  badge_status:
+                    type: string
+                    description: Status of the visitor's badge after checkout
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                visitor_id: "V2025042501"
+                checkout_time: "2025-04-25T17:05:30Z"
+                badge_status: "deactivated"
+                message: "Visitor successfully checked out"
+        '400':
+          description: Invalid request parameters
+        '401':
+          description: Unauthorized, invalid or expired token
+        '404':
+          description: Visitor not found or not checked in
+  /v1/policies/{policy_id}:
+    get:
+      summary: View a detailed access policy
+      description: Retrieves comprehensive information about a specific access policy identified by its unique ID.
+      tags:
+      - Policy Enforcement
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: policy_id
+        in: path
+        required: true
+        description: Unique identifier of the policy
+        schema:
+          type: string
+        example: "P101"
+      responses:
+        '200':
+          description: Policy details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policy_id:
+                    type: string
+                    description: Unique identifier for the policy
+                  name:
+                    type: string
+                    description: Human-readable name of the policy
+                  description:
+                    type: string
+                    description: Detailed description of the policy
+                  type:
+                    type: string
+                    description: Type of policy
+                  status:
+                    type: string
+                    description: Current status of the policy
+                  created_at:
+                    type: string
+                    format: date-time
+                    description: When the policy was created
+                  created_by:
+                    type: string
+                    description: ID of the user who created the policy
+                  modified_at:
+                    type: string
+                    format: date-time
+                    description: When the policy was last modified
+                  modified_by:
+                    type: string
+                    description: ID of the user who last modified the policy
+                  conditions:
+                    type: object
+                    description: Specific conditions for policy enforcement
+                    properties:
+                      zone_ids:
+                        type: array
+                        items:
+                          type: string
+                        description: Zones affected by this policy
+                      role_ids:
+                        type: array
+                        items:
+                          type: string
+                        description: Roles affected by this policy
+                      time_restrictions:
+                        type: object
+                        properties:
+                          start_time:
+                            type: string
+                            format: time
+                            description: Start time (24h format)
+                          end_time:
+                            type: string
+                            format: time
+                            description: End time (24h format)
+                          days:
+                            type: array
+                            items:
+                              type: string
+                            description: Days when the policy applies
+                  enforcement:
+                    type: object
+                    description: How the policy is enforced
+                    properties:
+                      action:
+                        type: string
+                        description: Action to take when policy conditions are met
+                      exceptions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            type:
+                              type: string
+                              description: Type of exception
+                            value:
+                              type: string
+                              description: Value of the exception
+              example:
+                policy_id: "P101"
+                name: "After-hours Access"
+                description: "Restricts access to authorized personnel during non-business hours"
+                type: "time-based"
+                status: "active"
+                created_at: "2024-12-10T14:30:00Z"
+                created_by: "12347"
+                modified_at: "2025-01-15T10:22:45Z"
+                modified_by: "12345"
+                conditions:
+                  zone_ids: ["Z101", "Z102", "Z103"]
+                  role_ids: ["employee", "contractor", "visitor"]
+                  time_restrictions:
+                    start_time: "18:00"
+                    end_time: "07:00"
+                    days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+                enforcement:
+                  action: "deny_access"
+                  exceptions: [
+                    {
+                      "type": "role",
+                      "value": "security"
+                    },
+                    {
+                      "type": "user",
+                      "value": "12345"
+                    }
+                  ]
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Policy not found
+    patch:
+      summary: Modify a policy rule
+      description: Updates specific attributes of an existing access policy without replacing the entire policy.
+      tags:
+      - Policy Enforcement
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: policy_id
+        in: path
+        required: true
+        description: Unique identifier of the policy to update
+        schema:
+          type: string
+        example: "P101"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Updated name for the policy
+                description:
+                  type: string
+                  description: Updated description
+                status:
+                  type: string
+                  description: Updated status
+                  enum: ["active", "inactive"]
+                conditions:
+                  type: object
+                  description: Updated conditions for policy enforcement
+                  properties:
+                    zone_ids:
+                      type: array
+                      items:
+                        type: string
+                      description: Updated zones affected by this policy
+                    role_ids:
+                      type: array
+                      items:
+                        type: string
+                      description: Updated roles affected by this policy
+                    time_restrictions:
+                      type: object
+                      properties:
+                        start_time:
+                          type: string
+                          format: time
+                          description: Updated start time (24h format)
+                        end_time:
+                          type: string
+                          format: time
+                          description: Updated end time (24h format)
+                        days:
+                          type: array
+                          items:
+                            type: string
+                          description: Updated days when the policy applies
+            example:
+              name: "Updated After-hours Access"
+              status: "active"
+              conditions:
+                time_restrictions:
+                  start_time: "19:00"
+                  end_time: "06:00"
+      responses:
+        '200':
+          description: Policy updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policy_id:
+                    type: string
+                    description: ID of the updated policy
+                  modified_at:
+                    type: string
+                    format: date-time
+                    description: Timestamp when the policy was updated
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                policy_id: "P101"
+                modified_at: "2025-04-25T14:30:45Z"
+                message: "Policy successfully updated"
+        '400':
+          description: Invalid request parameters
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Policy not found
+  /v1/alerts/badge-abuse:
+    post:
+      summary: Flag suspicious badge activity
+      description: Reports potentially suspicious or unauthorized badge usage for investigation.
+      tags:
+      - Emergency Response & Monitoring
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                badge_id:
+                  type: string
+                  description: ID of the badge showing suspicious activity
+                reported_by:
+                  type: string
+                  description: ID of the user reporting the incident
+                incident_time:
+                  type: string
+                  format: date-time
+                  description: When the suspicious activity occurred
+                location:
+                  type: string
+                  description: Where the suspicious activity was observed
+                description:
+                  type: string
+                  description: Detailed description of the suspicious activity
+                severity:
+                  type: string
+                  description: Perceived severity of the incident
+                  enum: ["low", "medium", "high", "critical"]
+              required:
+                - badge_id
+                - reported_by
+                - description
+                - severity
+            example:
+              badge_id: "B1001"
+              reported_by: "12346"
+              incident_time: "2025-04-25T13:45:22Z"
+              location: "Research Wing - East Entrance"
+              description: "Badge used in rapid succession at multiple entrances in different building zones"
+              severity: "high"
+      responses:
+        '200':
+          description: Badge flagged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alert_id:
+                    type: string
+                    description: Unique identifier for the created alert
+                  timestamp:
+                    type: string
+                    format: date-time
+                    description: When the alert was created
+                  status:
+                    type: string
+                    description: Current status of the alert
+                  message:
+                    type: string
+                    description: Success message
+              example:
+                alert_id: "ALERT202504251345"
+                timestamp: "2025-04-25T13:45:30Z"
+                status: "open"
+                message: "Badge abuse alert successfully created"
+        '400':
+          description: Invalid request parameters
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+  /v1/monitoring/occupancy:
+    get:
+      summary: List zone occupancy
+      description: Retrieves real-time information about all personnel currently present in a specific zone.
+      tags:
+      - Emergency Response & Monitoring
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: zone
+        in: query
+        required: true
+        description: Zone ID to check occupancy
+        schema:
+          type: string
+        example: "Z101"
+      - name: include_subzones
+        in: query
+        required: false
+        description: Whether to include occupancy in child zones
+        schema:
+          type: boolean
+        example: true
+      - name: user_type
+        in: query
+        required: false
+        description: Filter by user type
+        schema:
+          type: string
+          enum: ["employee", "contractor", "visitor", "all"]
+        example: "all"
+      responses:
+        '200':
+          description: Zone occupancy list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  zone_id:
+                    type: string
+                    description: Zone identifier
+                  zone_name:
+                    type: string
+                    description: Human-readable zone name
+                  total_capacity:
+                    type: integer
+                    description: Maximum capacity of the zone
+                  current_occupancy:
+                    type: integer
+                    description: Current number of people in the zone
+                  occupancy_percentage:
+                    type: number
+                    format: float
+                    description: Percentage of capacity currently used
+                  last_updated:
+                    type: string
+                    format: date-time
+                    description: When occupancy data was last updated
+                  personnel:
+                    type: array
+                    description: List of people currently in the zone
+                    items:
+                      type: object
+                      properties:
+                        user_id:
+                          type: string
+                          description: ID of the person
+                        badge_id:
+                          type: string
+                          description: ID of the badge used for access
+                        full_name:
+                          type: string
+                          description: Full name of the person
+                        type:
+                          type: string
+                          description: Type of personnel
+                        entry_time:
+                          type: string
+                          format: date-time
+                          description: When the person entered the zone
+                  subzones:
+                    type: array
+                    description: Occupancy in child zones (if requested)
+                    items:
+                      type: object
+                      properties:
+                        zone_id:
+                          type: string
+                          description: Subzone identifier
+                        zone_name:
+                          type: string
+                          description: Subzone name
+                        current_occupancy:
+                          type: integer
+                          description: Current number of people in this subzone
+              example:
+                zone_id: "Z101"
+                zone_name: "Research Wing"
+                total_capacity: 50
+                current_occupancy: 12
+                occupancy_percentage: 24.0
+                last_updated: "2025-04-25T14:55:30Z"
+                personnel:
+                  - user_id: "12345"
+                    badge_id: "B1001"
+                    full_name: "John Doe"
+                    type: "employee"
+                    entry_time: "2025-04-25T08:30:15Z"
+                  - user_id: "V2025042501"
+                    badge_id: "B5001"
+                    full_name: "Jane Smith"
+                    type: "visitor"
+                    entry_time: "2025-04-25T09:15:30Z"
+                subzones:
+                  - zone_id: "Z101-A"
+                    zone_name: "Bioresearch Lab"
+                    current_occupancy: 8
+                  - zone_id: "Z101-B"
+                    zone_name: "Electronics Lab"
+                    current_occupancy: 4
+        '401':
+          description: Unauthorized, invalid or expired token
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Zone not found
+
+  /v1/health:
+    get:
+      summary: Get API server health status
+      description: Checks the health status of the API server including disk utilization and gunicorn process status
+      operationId: healthCheck
+      tags:
+        - Health & Monitoring
+      responses:
+        '200':
+          description: Successful operation - system is healthy
+        '503':
+          description: Service unavailable - system health issues detected
+
+  /v1/health/db:
+    get:
+      summary: Check database integrity
+      description: Performs a database integrity check using SQLite's PRAGMA integrity_check
+      operationId: dbHealthCheck
+      tags:
+        - Health & Monitoring
+      responses:
+        '200':
+          description: Successful operation - database is healthy
+        '503':
+          description: Service unavailable - database integrity issues detected
+
+  /v1/health/logsearch:
+    get:
+      summary: Search log files for patterns
+      description: Checks application logs for specific patterns or errors
+      operationId: logHealthCheck
+      tags:
+        - Health & Monitoring
+      parameters:
+        - name: file
+          in: query
+          description: Log file to search
+          required: false
+          schema:
+            type: string
+            default: app.log
+        - name: keyword
+          in: query
+          description: Keyword or pattern to search for in logs
+          required: false
+          schema:
+            type: string
+            default: FAIL
+      responses:
+        '200':
+          description: Successful operation - log search completed
+        '500':
+          description: Error searching logs
