@@ -143,11 +143,13 @@ def extract_docs_from_openapi(openapi_data):
                         for content_type, content in response['content'].items():
                             if 'example' in content:
                                 docs.append(f"\n    Example ({content_type}):")
+                                docs.append("")  # Add an extra line break before the example content
                                 example_lines = yaml.dump(content['example'], default_flow_style=False).strip().split('\n')
                                 for line in example_lines:
                                     docs.append(f"      {line}")
                             elif 'schema' in content and 'example' in content['schema']:
                                 docs.append(f"\n    Example ({content_type}):")
+                                docs.append("")  # Add an extra line break before the example content
                                 example_lines = yaml.dump(content['schema']['example'], default_flow_style=False).strip().split('\n')
                                 for line in example_lines:
                                     docs.append(f"      {line}")
