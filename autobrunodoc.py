@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.6"
+# dependencies = [
+#     "pyyaml"
+# ]
+# ///
 """
 OpenAPI to Bruno Documentation Converter
 
